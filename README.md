@@ -4,6 +4,10 @@ A web-based augmented-reality museum built for **GEHS 260: History of the Lebane
 
 Six printed exhibit frames hang around the classroom. Visitors scan the QR code on the entrance poster, open the museum in their phone browser (no app install), and point the camera at a frame. Its period then comes to life in 3D, with a museum plaque and an audio guide.
 
+There are two ways to visit:
+- **Enter the museum** (`ar.html`): point the camera at the printed exhibit frames (image tracking).
+- **Museum around you** (`around.html`): no printed pictures needed. The six exhibits appear in a circle around the visitor over the live camera view, and turning the phone (motion sensors) brings each one into view. On a laptop, drag or use the arrow keys / number keys 1–6.
+
 **Live site:** https://salimgergess08-beep.github.io/lira-museum-ar/
 
 | # | Period | Exhibit | What comes alive |
@@ -29,6 +33,7 @@ Only the source is stored in the repo. On every push to `main`, the GitHub Actio
 ```
 index.html            lobby: hall list, visitor passport, instructions
 ar.html               the AR scanner (MindAR image tracking + three.js)
+around.html           "Museum around you": exhibits in a circle, no pictures needed
 preview.html          no-camera 3D preview of every exhibit (keys 1–6)
 js/exhibits.js        exhibit TEXT (plaques, audio guide) and the 3D scenes
 js/museum.js          visitor passport + speech-synthesis audio guide

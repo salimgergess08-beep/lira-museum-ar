@@ -39,14 +39,15 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(p)] || 'application/octet-stream' });
   fs.createReadStream(p).pipe(res);
 });
-await new Promise((ok) => server.listen(8765, ok));
+await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+const BASE = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 try {
   // 2 + 3. artwork and tracking file
   const page = await browser.newPage();
   page.on('pageerror', (e) => console.log('[page error]', e.message));
-  await page.goto('http://localhost:8765/tools/targets.html', { waitUntil: 'networkidle0' });
+  await page.goto(`${BASE}/tools/targets.html`, { waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.MINDAR && window.MINDAR.IMAGE, { timeout: 60000 });
   mkdir(r('targets'));
   const urls = [];
@@ -65,7 +66,7 @@ try {
   mkdir(r('print'));
   await QRCode.toFile(r('print', 'qr.png'), SITE_URL, { margin: 1, scale: 20, errorCorrectionLevel: 'M' });
   const p2 = await browser.newPage();
-  await p2.goto(`http://localhost:8765/tools/posters.html?url=${encodeURIComponent(SITE_URL)}`, { waitUntil: 'networkidle0' });
+  await p2.goto(`${BASE}/tools/posters.html?url=${encodeURIComponent(SITE_URL)}`, { waitUntil: 'networkidle0' });
   await p2.pdf({ path: r('print', 'posters.pdf'), format: 'A4', printBackground: true, preferCSSPageSize: true });
   log('posters.pdf written (entrance QR ->', SITE_URL + ')');
 } finally {
@@ -76,6 +77,6 @@ try {
 // assemble _site
 const SITE = r('_site');
 fs.rmSync(SITE, { recursive: true, force: true });
-const include = ['index.html', 'ar.html', 'preview.html', '.nojekyll', 'README.md', 'css', 'js', 'vendor', 'targets', 'print'];
+const include = ['index.html', 'ar.html', 'around.html', 'preview.html', '.nojekyll', 'README.md', 'css', 'js', 'vendor', 'targets', 'print'];
 for (const item of include) if (fs.existsSync(r(item))) fs.cpSync(r(item), path.join(SITE, item), { recursive: true });
 log('site assembled in _site/');

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Museum of the Lebanese Lira · Museum around you</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23d9a93a%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 text-anchor=%22middle%22 font-family=%22Georgia%22 fill=%22%231d1408%22%3EL%C2%A3%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/museum.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body class="ar around">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="view"></canvas>
+
+  <header class="ar-top">
+    <a href="./" class="back" aria-label="Back to the lobby">&larr;</a>
+    <div class="ar-title">
+      <span class="eyebrow">Museum around you</span>
+      <span id="status">Turn around to explore</span>
+    </div>
+    <button id="recenter" class="round" title="Bring Exhibit I in front of you" aria-label="Re-center">&#8634;</button>
+    <div class="passport" title="Exhibits visited"><span id="visited">0</span>/6</div>
+  </header>
+
+  <canvas id="radar" width="180" height="180" aria-hidden="true"></canvas>
+  <div id="turn" class="turn" hidden></div>
+
+  <section id="plaque" class="plaque" aria-live="polite">
+    <div class="plaque-head">
+      <span id="p-num" class="p-num"></span>
+      <span id="p-period" class="p-period"></span>
+    </div>
+    <h2 id="p-title"></h2>
+    <p id="p-text"></p>
+    <p id="p-lesson" class="lesson"></p>
+    <div class="plaque-actions">
+      <button id="audio" class="btn gold">&#127911; Audio guide</button>
+      <button id="replay" class="btn">&#8635; Replay</button>
+      <button id="more" class="btn">Read more</button>
+    </div>
+  </section>
+
+  <div id="start" class="start">
+    <div class="eyebrow">Museum of the Lebanese Lira</div>
+    <h1>The museum<br /><em>around you</em></h1>
+    <p>Six exhibits will appear in a circle around you. Stand up, hold your phone in front of you, and turn slowly to visit each one.</p>
+    <button id="go" class="btn gold big">Start the visit</button>
+    <small>Allow the camera and motion access when asked. No printed pictures needed.</small>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EXHIBITS, SCENES, setupLighting } from './js/exhibits.js';
+    import { markVisited, visitedCount, visitedSet, speak, stopSpeaking } from './js/museum.js';
+
+    const $ = (id) => document.getElementById(id);
+    $('visited').textContent = visitedCount();
+
+    // ---------- scene ----------
+    const canvas = $('view');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(62, 1, 0.01, 50);
+    camera.rotation.order = 'YXZ';
+    await setupLighting(scene, renderer);
+    // a lamp at the visitor's position, so every exhibit in the circle is lit from the front
+    const lamp = new THREE.PointLight(0xffffff, 3.2, 0, 0); lamp.position.set(0, 0.6, 0); scene.add(lamp);
+
+    const R = 2.4;                      // radius of the ring of exhibits
+    const STEP = Math.PI / 3;           // 60 degrees between exhibits
+    const loader = new THREE.TextureLoader();
+    const clock = new THREE.Clock();
+
+    const roman = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+    const exhibits = SCENES.map((make, i) => {
+      const yaw = -i * STEP;            // turn right to reach the next exhibit
+      const holder = new THREE.Group();
+      holder.position.set(-Math.sin(yaw) * R, 0, -Math.cos(yaw) * R);
+      holder.lookAt(0, 0, 0);           // +z (the scene's "out of the poster") faces the visitor
+      scene.add(holder);
+      // the painting
+      const poster = new THREE.Mesh(new THREE.PlaneGeometry(1, 4 / 3), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }));
+      loader.load(`targets/exhibit-${i + 1}.png`, (t) => { t.colorSpace = THREE.SRGBColorSpace; poster.material.map = t; poster.material.needsUpdate = true; });
+      holder.add(poster);
+      // soft glow behind it, like a gallery spotlight
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.85), new THREE.MeshBasicMaterial({ color: 0xf7d774, transparent: true, opacity: 0.0, depthWrite: false }));
+      glow.position.z = -0.02; holder.add(glow);
+      const sc = make();
+      holder.add(sc.group);
+      const dir = holder.position.clone().normalize();
+      return { i, yaw, holder, glow, sc, dir, t: 0, start: 0, lastSeen: -99 };
+    });
+
+    // floor ring, only shown when there is no camera image behind the scene
+    const floor = new THREE.Mesh(new THREE.RingGeometry(R - 0.03, R + 0.03, 96), new THREE.MeshBasicMaterial({ color: 0xd9a93a, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+    floor.rotation.x = -Math.PI / 2; floor.position.y = -1.25; floor.visible = false; scene.add(floor);
+
+    // ---------- looking around: motion sensors, or drag on a laptop ----------
+    const zee = new THREE.Vector3(0, 0, 1);
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // camera looks out the back of the phone
+    const euler = new THREE.Euler();
+    const qSensor = new THREE.Quaternion();
+    const qYaw = new THREE.Quaternion();
+    let orientation = null;             // latest deviceorientation event values
+    let yawOffset = 0;
+    let usingSensors = false;
+    let manualYaw = 0, manualPitch = 0;
+
+    function screenAngle() {
+      const a = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
+      return THREE.MathUtils.degToRad(a);
+    }
+    function sensorQuaternion(out) {
+      const { alpha, beta, gamma } = orientation;
+      euler.set(THREE.MathUtils.degToRad(beta), THREE.MathUtils.degToRad(alpha), -THREE.MathUtils.degToRad(gamma), 'YXZ');
+      out.setFromEuler(euler);
+      out.multiply(q1);
+      out.multiply(new THREE.Quaternion().setFromAxisAngle(zee, -screenAngle()));
+      return out;
+    }
+    function yawOf(q) {
+      const f = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+      return Math.atan2(-f.x, -f.z);
+    }
+    function recenter() {
+      if (usingSensors && orientation) yawOffset = -yawOf(sensorQuaternion(qSensor));
+      else { manualYaw = 0; manualPitch = 0; }
+    }
+    window.addEventListener('deviceorientation', (e) => {
+      if (e.alpha === null) return;
+      const first = !orientation;
+      orientation = { alpha: e.alpha, beta: e.beta, gamma: e.gamma };
+      if (first) { usingSensors = true; recenter(); document.body.classList.remove('drag'); }
+    });
+
+    // drag to look (laptops, or phones without motion sensors)
+    let dragging = null;
+    canvas.addEventListener('pointerdown', (e) => { dragging = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!dragging || usingSensors) return;
+      manualYaw += (e.clientX - dragging.x) * 0.005;
+      manualPitch = THREE.MathUtils.clamp(manualPitch + (e.clientY - dragging.y) * 0.004, -0.9, 0.9);
+      dragging = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('pointerup', () => (dragging = null));
+    addEventListener('keydown', (e) => {
+      if (usingSensors) return;
+      if (e.key === 'ArrowRight') manualYaw -= STEP / 2;
+      if (e.key === 'ArrowLeft') manualYaw += STEP / 2;
+      const n = parseInt(e.key); if (n >= 1 && n <= 6) manualYaw = exhibits[n - 1].yaw;
+    });
+    window.__around = { faceExhibit: (n) => { manualYaw = exhibits[n - 1].yaw; }, state: () => ({ focused, usingSensors }) };
+
+    // ---------- start: ask for motion + camera on the user's tap ----------
+    $('go').onclick = async () => {
+      // iPhone needs this call to happen directly inside the tap
+      try {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          await DeviceOrientationEvent.requestPermission();
+        }
+      } catch (err) { console.warn('motion permission', err); }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        $('cam').srcObject = stream; await $('cam').play().catch(() => {});
+        document.body.classList.add('has-cam');
+      } catch (err) {
+        console.warn('camera', err);
+        floor.visible = true; // no camera: show a virtual gallery instead
+      }
+      $('start').classList.add('gone');
+      setTimeout(() => { if (!usingSensors) { document.body.classList.add('drag'); if (focused === null) $('status').textContent = 'Drag to look around'; } }, 1500);
+    };
+    $('recenter').onclick = recenter;
+
+    // ---------- plaque, audio, focus ----------
+    let focused = null, shown = null;
+    function showPlaque(i) {
+      const e = EXHIBITS[i];
+      if (shown !== i) stopSpeaking();
+      shown = i;
+      $('p-num').textContent = `Exhibit ${roman[i]} of VI`;
+      $('p-period').textContent = e.period;
+      $('p-title').textContent = e.title;
+      $('p-text').textContent = e.plaque;
+      $('p-lesson').textContent = e.lesson;
+      $('plaque').classList.add('open');
+    }
+    $('audio').onclick = () => { if (shown === null) return; const e = EXHIBITS[shown]; speak(`Exhibit ${e.id}. ${e.period}. ${e.title}. ${e.plaque} ${e.lesson}`, $('audio')); };
+    $('more').onclick = () => { const x = $('plaque').classList.toggle('expanded'); $('more').textContent = x ? 'Less' : 'Read more'; };
+    $('replay').onclick = () => { if (shown !== null) exhibits[shown].start = clock.getElapsedTime(); };
+
+    // ---------- radar (mini map) ----------
+    const rc = $('radar').getContext('2d');
+    function drawRadar(viewYaw) {
+      const w = 180, c = w / 2, r = 62; rc.clearRect(0, 0, w, w);
+      rc.fillStyle = 'rgba(15,12,10,.6)'; rc.beginPath(); rc.arc(c, c, 86, 0, 7); rc.fill();
+      // view cone
+      rc.fillStyle = 'rgba(247,215,116,.22)'; rc.beginPath(); rc.moveTo(c, c);
+      const a0 = -Math.PI / 2 - viewYaw;
+      rc.arc(c, c, 84, a0 - 0.45, a0 + 0.45); rc.closePath(); rc.fill();
+      const seen = visitedSet();
+      exhibits.forEach((ex) => {
+        const a = -Math.PI / 2 - ex.yaw, x = c + Math.cos(a) * r, y = c + Math.sin(a) * r;
+        rc.fillStyle = ex.i === focused ? '#f7d774' : seen.has(ex.i + 1) ? '#d9a93a' : 'rgba(255,255,255,.35)';
+        rc.beginPath(); rc.arc(x, y, ex.i === focused ? 15 : 12, 0, 7); rc.fill();
+        rc.fillStyle = ex.i === focused || seen.has(ex.i + 1) ? '#1d1408' : '#fff';
+        rc.font = '700 13px Georgia'; rc.textAlign = 'center'; rc.textBaseline = 'middle'; rc.fillText(roman[ex.i], x, y + 1);
+      });
+      rc.fillStyle = '#fff'; rc.beginPath(); rc.arc(c, c, 5, 0, 7); rc.fill();
+    }
+
+    // ---------- loop ----------
+    const fwd = new THREE.Vector3();
+    function resize() {
+      const w = innerWidth, h = innerHeight;
+      renderer.setSize(w, h, false); camera.aspect = w / h;
+      camera.fov = w < h ? 62 : 48; camera.updateProjectionMatrix();
+    }
+    addEventListener('resize', resize); resize();
+
+    renderer.setAnimationLoop(() => {
+      const now = clock.getElapsedTime();
+      if (usingSensors && orientation) {
+        sensorQuaternion(qSensor);
+        qYaw.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawOffset);
+        camera.quaternion.copy(qYaw).multiply(qSensor);
+      } else {
+        camera.rotation.set(manualPitch, manualYaw, 0, 'YXZ');
+      }
+      camera.getWorldDirection(fwd);
+      const viewYaw = Math.atan2(-fwd.x, -fwd.z);
+
+      // which exhibit is in front of the visitor?
+      let best = null, bestAng = Infinity;
+      for (const ex of exhibits) {
+        const ang = Math.acos(THREE.MathUtils.clamp(fwd.dot(ex.dir) / fwd.length(), -1, 1));
+        if (ang < bestAng) { bestAng = ang; best = ex; }
+      }
+      const limit = focused === best.i ? 0.55 : 0.4; // a little stickiness
+      const nowFocused = bestAng < limit ? best.i : null;
+      if (nowFocused !== focused) {
+        focused = nowFocused;
+        if (focused !== null) {
+          const ex = exhibits[focused];
+          if (now - ex.lastSeen > 4) ex.start = now; // replay if you were away for a while
+          showPlaque(focused);
+          $('status').textContent = `Exhibit ${roman[focused]} · ${EXHIBITS[focused].period}`;
+          $('visited').textContent = markVisited(focused + 1);
+          if (navigator.vibrate) navigator.vibrate(25);
+        } else {
+          $('status').textContent = usingSensors ? 'Turn to find the next exhibit' : 'Drag to look around';
+        }
+      }
+
+      // turn hint toward the nearest exhibit not yet visited
+      const seen = visitedSet();
+      const todo = exhibits.filter((ex) => !seen.has(ex.i + 1));
+      const started = $('start').classList.contains('gone');
+      if (focused === null && started) {
+        const pool = todo.length ? todo : exhibits;
+        let tgt = pool[0], d = Infinity;
+        for (const ex of pool) { const dd = Math.atan2(Math.sin(ex.yaw - viewYaw), Math.cos(ex.yaw - viewYaw)); if (Math.abs(dd) < Math.abs(d)) { d = dd; tgt = ex; } }
+        $('turn').hidden = false;
+        $('turn').innerHTML = d > 0 ? `&larr; Exhibit ${roman[tgt.i]}` : `Exhibit ${roman[tgt.i]} &rarr;`;
+        $('turn').className = 'turn ' + (d > 0 ? 'left' : 'right');
+      } else {
+        $('turn').hidden = true;
+      }
+
+      for (const ex of exhibits) {
+        if (ex.i === focused) { ex.t = now - ex.start; ex.lastSeen = now; }
+        ex.sc.update(ex.t);
+        const target = ex.i === focused ? 0.18 : 0.0;
+        ex.glow.material.opacity += (target - ex.glow.material.opacity) * 0.08;
+      }
+      drawRadar(viewYaw);
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>

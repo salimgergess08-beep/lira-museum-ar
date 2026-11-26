@@ -81,3 +81,29 @@ body.preview { overflow: hidden; background: radial-gradient(100% 80% at 50% 20%
 .tabs { position: fixed; z-index: 10; top: 12px; left: 0; right: 0; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 0 10px; }
 .tabs button { border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.4); color: #fff; padding: 8px 12px; border-radius: 999px; font: 600 13px var(--sans); cursor: pointer; }
 .tabs button.on { background: var(--gold); color: #1d1408; border-color: var(--gold); }
+
+/* ---------- museum around you ---------- */
+body.around { background: radial-gradient(120% 90% at 50% 30%, #3a2c1f, #120e0c 70%); }
+body.around.has-cam { background: #000; }
+#cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+body.has-cam #cam { display: block; }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+body.drag #view { cursor: grab; }
+.ar-top .round { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.45); color: #fff; font-size: 20px; cursor: pointer; }
+#radar { position: fixed; z-index: 18; top: calc(68px + env(safe-area-inset-top)); right: 12px; width: 90px; height: 90px; pointer-events: none; }
+.turn { position: fixed; z-index: 18; top: 46%; padding: 10px 16px; border-radius: 999px; background: rgba(0,0,0,.6); border: 1px solid rgba(247,215,116,.6); color: var(--gold-soft); font: 700 16px var(--sans); pointer-events: none; animation: nudge 1.2s ease-in-out infinite; }
+.turn.left { left: 12px; } .turn.right { right: 12px; }
+.turn[hidden] { display: none; }
+@keyframes nudge { 50% { transform: translateX(6px); } }
+.turn.left { animation-name: nudgeL; } @keyframes nudgeL { 50% { transform: translateX(-6px); } }
+.start { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 30px; text-align: center; background: radial-gradient(120% 80% at 50% 0%, #3a2c1f 0%, var(--wall) 45%, var(--ink) 100%); transition: opacity .4s; }
+.start.gone { opacity: 0; pointer-events: none; }
+.start .eyebrow { letter-spacing: .3em; text-transform: uppercase; font-size: 12px; color: var(--gold); }
+.start h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 9vw, 54px); line-height: 1.05; margin: 4px 0; }
+.start h1 em { color: var(--gold-soft); }
+.start p { color: #e6ddd2; max-width: 38ch; line-height: 1.5; margin: 0; }
+.start small { color: var(--muted); max-width: 36ch; }
+.btn.big { font-size: 18px; padding: 16px 30px; }
+.alt-visit { color: #e6ddd2; line-height: 1.5; margin: 16px 0 0; }
+.enter small { text-align: center; max-width: 34ch; }
+.enter .btn.second { margin-top: 10px; font-size: 17px; padding: 14px 26px; border-color: rgba(217,169,58,.7); }
