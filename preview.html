@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Museum of the Lebanese Lira · 3D preview</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23d9a93a%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 text-anchor=%22middle%22 font-family=%22Georgia%22 fill=%22%231d1408%22%3EL%C2%A3%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/museum.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body class="preview ar">
+  <canvas id="preview-canvas"></canvas>
+  <nav class="tabs" id="tabs"><a href="./" class="btn" style="padding:8px 12px">&larr; Lobby</a></nav>
+
+  <section id="plaque" class="plaque open">
+    <div class="plaque-head"><span id="p-num"></span><span id="p-period"></span></div>
+    <h2 id="p-title"></h2>
+    <p id="p-text"></p>
+    <p id="p-lesson" class="lesson"></p>
+    <div class="plaque-actions">
+      <button id="audio" class="btn gold">&#127911; Audio guide</button>
+      <button id="replay" class="btn">&#8635; Replay</button>
+      <button id="hide" class="btn">Hide text</button>
+    </div>
+  </section>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EXHIBITS, SCENES, setupLighting } from './js/exhibits.js';
+    import { speak, stopSpeaking } from './js/museum.js';
+
+    const $ = (id) => document.getElementById(id);
+    const canvas = $('preview-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 50);
+    camera.position.set(0.25, 0.05, 2.4);
+    const controls = new OrbitControls(camera, canvas);
+    controls.target.set(0, 0, 0.15); controls.enableDamping = true;
+    await setupLighting(scene, renderer);
+
+    // a framed "poster" behind each scene, like on the museum wall
+    const frameLoader = new THREE.TextureLoader();
+    const poster = new THREE.Mesh(new THREE.PlaneGeometry(1, 1.3333), new THREE.MeshStandardMaterial({ roughness: 0.8 }));
+    scene.add(poster);
+
+    let current = null, start = 0, idx = 0;
+    const clock = new THREE.Clock();
+
+    function show(i) {
+      idx = i;
+      if (current) scene.remove(current.group);
+      current = SCENES[i]();
+      scene.add(current.group);
+      start = clock.getElapsedTime();
+      frameLoader.load(`targets/exhibit-${i + 1}.png`, (t) => { t.colorSpace = THREE.SRGBColorSpace; poster.material.map = t; poster.material.needsUpdate = true; });
+      const e = EXHIBITS[i];
+      $('p-num').textContent = `Exhibit ${e.id} of 6`; $('p-period').textContent = e.period;
+      $('p-title').textContent = e.title; $('p-text').textContent = e.plaque; $('p-lesson').textContent = e.lesson;
+      document.querySelectorAll('#tabs button').forEach((b, k) => b.classList.toggle('on', k === i));
+      stopSpeaking();
+      history.replaceState(null, '', `#${i + 1}`);
+    }
+
+    EXHIBITS.forEach((e, i) => {
+      const b = document.createElement('button');
+      b.textContent = `${e.id}. ${e.title}`; b.onclick = () => show(i);
+      $('tabs').appendChild(b);
+    });
+    $('replay').onclick = () => (start = clock.getElapsedTime());
+    $('audio').onclick = () => { const e = EXHIBITS[idx]; speak(`Exhibit ${e.id}. ${e.period}. ${e.title}. ${e.plaque} ${e.lesson}`, $('audio')); };
+    $('hide').onclick = () => $('plaque').classList.toggle('open');
+    addEventListener('keydown', (ev) => { const n = parseInt(ev.key); if (n >= 1 && n <= 6) show(n - 1); });
+
+    function resize() {
+      const w = innerWidth, h = innerHeight;
+      renderer.setSize(w, h, false); camera.aspect = w / h;
+      camera.position.z = w < h ? 3.3 : 2.4;
+      camera.updateProjectionMatrix();
+    }
+    addEventListener('resize', resize); resize();
+
+    show(Math.min(5, Math.max(0, (parseInt(location.hash.slice(1)) || 1) - 1)));
+    // hooks used by tools/record.mjs to render a backup video frame by frame
+    window.__preview = { show, camera, controls, setTime: (t) => (window.__t = t) };
+    renderer.setAnimationLoop(() => {
+      current.update(window.__t ?? (clock.getElapsedTime() - start));
+      controls.update();
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>

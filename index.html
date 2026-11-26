@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Museum of the Lebanese Lira · 1920–2031</title>
+  <meta name="description" content="An augmented-reality museum of Lebanon's currency, from 1920 to a proposed New Lira in 2031. GEHS 260 · USEK · Group 5." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23d9a93a%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 text-anchor=%22middle%22 font-family=%22Georgia%22 fill=%22%231d1408%22%3EL%C2%A3%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/museum.css" />
+</head>
+<body class="lobby">
+  <main>
+    <section class="marquee">
+      <div class="eyebrow">Augmented reality exhibition</div>
+      <h1>Museum of the<br /><em>Lebanese Lira</em></h1>
+      <p>Six exhibits, from the birth of the lira in 1920 to our proposed New Lira of 2031. Scan each frame to bring its history &mdash; and its future &mdash; to life.</p>
+    </section>
+
+    <div class="enter">
+      <a class="btn gold" href="ar.html">&#128247; Enter the museum</a>
+      <small>Allow camera access when asked</small>
+    </div>
+
+    <h2 class="section-title">The halls</h2>
+    <ul class="halls" id="halls"></ul>
+
+    <h2 class="section-title">How to visit</h2>
+    <ol class="steps">
+      <li>Tap <strong>Enter the museum</strong> and allow the camera.</li>
+      <li>Point your phone at an exhibit frame on the wall, from about 40&ndash;80&nbsp;cm away.</li>
+      <li>Watch the exhibit come alive, read the plaque, or tap <strong>Audio guide</strong>.</li>
+      <li>Visit all six to complete your museum passport.</li>
+    </ol>
+    <div class="links">
+      <a class="btn" href="preview.html">3D preview (no camera)</a>
+      <a class="btn" href="print/posters.pdf">Printable exhibit frames (PDF)</a>
+    </div>
+
+    <footer>
+      GEHS 260 &middot; History of the Lebanese Monetary System since 1918<br />
+      Holy Spirit University of Kaslik &middot; Fall 2026 &middot; Group 5<br />
+      Bachir Rouhana &middot; Camil Ouneissy &middot; Georges Akiki &middot; Salim Gergess
+    </footer>
+  </main>
+
+  <script type="module">
+    import { visitedSet } from './js/museum.js';
+    const HALLS = [
+      ['1920', 'The Birth of the Lira'],
+      ['1997 – 2019', 'The Peg'],
+      ['2019 – 2023', 'The Collapse'],
+      ['2026', 'Lebanon Today'],
+      ['2026 – 2031', 'Our Roadmap'],
+      ['2031', 'The New Lira'],
+    ];
+    const seen = visitedSet();
+    document.getElementById('halls').innerHTML = HALLS.map(([p, n], i) => `
+      <li><span class="num">${['I','II','III','IV','V','VI'][i]}</span>
+        <a href="preview.html#${i + 1}"><div class="period">${p}</div><div class="name">${n}</div></a>
+        <span class="stamp ${seen.has(i + 1) ? 'on' : ''}">${seen.has(i + 1) ? '&#10003; Visited' : 'Not yet'}</span></li>`).join('');
+  </script>
+</body>
+</html>

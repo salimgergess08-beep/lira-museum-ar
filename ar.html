@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Museum of the Lebanese Lira · AR</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23d9a93a%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 text-anchor=%22middle%22 font-family=%22Georgia%22 fill=%22%231d1408%22%3EL%C2%A3%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/museum.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/addons/",
+        "mindar-image-three": "./vendor/mind-ar/mindar-image-three.prod.js"
+      }
+    }
+  </script>
+</head>
+<body class="ar">
+  <div id="ar-container"></div>
+
+  <header class="ar-top">
+    <a href="./" class="back" aria-label="Back to the lobby">&larr;</a>
+    <div class="ar-title">
+      <span class="eyebrow">Museum of the Lebanese Lira</span>
+      <span id="status">Starting camera&hellip;</span>
+    </div>
+    <div class="passport" title="Exhibits visited"><span id="visited">0</span>/6</div>
+  </header>
+
+  <div id="hint" class="hint">
+    <div class="frame-icon"></div>
+    <p>Point your camera at an exhibit frame</p>
+  </div>
+
+  <section id="plaque" class="plaque" aria-live="polite">
+    <div class="plaque-head">
+      <span id="p-num" class="p-num">Exhibit 1</span>
+      <span id="p-period" class="p-period"></span>
+    </div>
+    <h2 id="p-title"></h2>
+    <p id="p-text"></p>
+    <p id="p-lesson" class="lesson"></p>
+    <div class="plaque-actions">
+      <button id="audio" class="btn gold">&#127911; Audio guide</button>
+      <button id="replay" class="btn">&#8635; Replay</button>
+      <button id="more" class="btn">Read more</button>
+    </div>
+  </section>
+
+  <div id="error" class="error" hidden>
+    <h2>Camera not available</h2>
+    <p>Allow camera access for this page, then reload. On iPhone use Safari; on Android use Chrome.</p>
+    <a class="btn gold" href="preview.html">Open the 3D preview instead</a>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { MindARThree } from 'mindar-image-three';
+    import { EXHIBITS, SCENES, setupLighting } from './js/exhibits.js';
+    import { markVisited, visitedCount, speak, stopSpeaking } from './js/museum.js';
+
+    const $ = (id) => document.getElementById(id);
+    $('visited').textContent = visitedCount();
+
+    const mindar = new MindARThree({
+      container: $('ar-container'),
+      imageTargetSrc: './targets/targets.mind',
+      maxTrack: 1,
+      uiScanning: 'no',
+      uiLoading: 'no',
+      uiError: 'no',
+      filterMinCF: 0.0001,
+      filterBeta: 0.001,
+      missTolerance: 8,
+    });
+    const { renderer, scene, camera } = mindar;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    await setupLighting(scene, renderer);
+
+    const clock = new THREE.Clock();
+    let active = null;          // index of the exhibit currently in view
+    let shownPlaque = null;     // index whose plaque is shown
+    let hideTimer = null;
+    const exhibits = SCENES.map((make, i) => {
+      const anchor = mindar.addAnchor(i);
+      const sc = make();
+      anchor.group.add(sc.group);
+      const ex = { anchor, sc, start: 0 };
+      anchor.onTargetFound = () => {
+        active = i; ex.start = clock.getElapsedTime();
+        clearTimeout(hideTimer);
+        showPlaque(i);
+        $('hint').classList.add('hidden');
+        $('status').textContent = `Exhibit ${i + 1} · ${EXHIBITS[i].period}`;
+        $('visited').textContent = markVisited(i + 1);
+        if (navigator.vibrate) navigator.vibrate(30);
+      };
+      anchor.onTargetLost = () => {
+        if (active === i) active = null;
+        $('status').textContent = 'Looking for an exhibit…';
+        hideTimer = setTimeout(() => { if (active === null) { $('plaque').classList.remove('open'); $('hint').classList.remove('hidden'); } }, 6000);
+      };
+      return ex;
+    });
+
+    function showPlaque(i) {
+      const e = EXHIBITS[i];
+      if (shownPlaque !== i) stopSpeaking();
+      shownPlaque = i;
+      $('p-num').textContent = `Exhibit ${e.id} of 6`;
+      $('p-period').textContent = e.period;
+      $('p-title').textContent = e.title;
+      $('p-text').textContent = e.plaque;
+      $('p-lesson').textContent = e.lesson;
+      $('plaque').classList.add('open');
+    }
+
+    $('audio').onclick = () => {
+      if (shownPlaque === null) return;
+      const e = EXHIBITS[shownPlaque];
+      speak(`Exhibit ${e.id}. ${e.period}. ${e.title}. ${e.plaque} ${e.lesson}`, $('audio'));
+    };
+    $('more').onclick = () => { const x = $('plaque').classList.toggle('expanded'); $('more').textContent = x ? 'Less' : 'Read more'; };
+    $('replay').onclick = () => { if (shownPlaque !== null) exhibits[shownPlaque].start = clock.getElapsedTime(); };
+
+    try {
+      await mindar.start();
+      $('status').textContent = 'Looking for an exhibit…';
+    } catch (err) {
+      console.error(err);
+      $('error').hidden = false; $('hint').classList.add('hidden');
+    }
+
+    renderer.setAnimationLoop(() => {
+      const now = clock.getElapsedTime();
+      exhibits.forEach((ex, i) => { if (ex.anchor.visible || i === active) ex.sc.update(now - ex.start); });
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>
