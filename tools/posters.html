@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Printable exhibit frames</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Georgia, 'Times New Roman', serif; color: #1d1408; }
+  .page { width: 210mm; height: 297mm; page-break-after: always; position: relative; background: #f6f1e7; overflow: hidden; }
+  .top { position: absolute; top: 9mm; left: 0; right: 0; text-align: center; font: 600 9pt Arial, sans-serif; letter-spacing: .35em; color: #8a6420; }
+  .art { position: absolute; top: 17mm; left: 25mm; width: 160mm; height: 213.33mm; box-shadow: 0 2mm 6mm rgba(0,0,0,.25); }
+  .label { position: absolute; left: 25mm; right: 25mm; top: 238mm; display: grid; grid-template-columns: 1fr auto; gap: 6mm; align-items: center; border-top: .5mm solid #d9a93a; padding-top: 5mm; }
+  .label .num { font: 700 9pt Arial, sans-serif; letter-spacing: .2em; color: #8a6420; }
+  .label h2 { font-weight: 400; font-size: 22pt; margin: 1.5mm 0 1.5mm; }
+  .label p { margin: 0; font-style: italic; font-size: 11pt; color: #5a4630; }
+  .scan { text-align: center; font: 600 8pt Arial, sans-serif; color: #5a4630; width: 34mm; }
+  .scan .icon { font-size: 22pt; display: block; }
+  .cut { position: absolute; bottom: 6mm; left: 0; right: 0; text-align: center; font: 7pt Arial, sans-serif; color: #a99; }
+  /* entrance */
+  .entrance { background: #17120f; color: #f4efe6; text-align: center; }
+  .entrance .eyebrow { margin-top: 32mm; font: 600 10pt Arial, sans-serif; letter-spacing: .4em; color: #d9a93a; }
+  .entrance h1 { font-weight: 400; font-size: 46pt; line-height: 1.05; margin: 8mm 0 4mm; }
+  .entrance h1 em { color: #f7d774; }
+  .entrance .sub { font-size: 14pt; color: #cbbfae; }
+  .entrance .qr { margin: 14mm auto 6mm; width: 78mm; height: 78mm; background: #fff; padding: 5mm; border-radius: 3mm; border: 1.2mm solid #d9a93a; }
+  .entrance .qr img { width: 100%; height: 100%; image-rendering: pixelated; }
+  .entrance .url { font: 600 11pt Arial, sans-serif; color: #f7d774; }
+  .entrance ol { text-align: left; width: 120mm; margin: 10mm auto 0; font: 11.5pt/1.7 Arial, sans-serif; color: #e6ddd2; }
+  .entrance .credits { position: absolute; bottom: 14mm; left: 0; right: 0; font: 9pt/1.6 Arial, sans-serif; color: #b9ada0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const params = new URLSearchParams(location.search);
+const URL_ = params.get('url') || '';
+const EX = [
+  ['I', '1920', 'The Birth of the Lira', 'From day one, the lira’s value was borrowed from a foreign anchor.'],
+  ['II', '1997 – 2019', 'The Peg', 'A fixed rate is only as strong as the dollars behind it.'],
+  ['III', '2019 – 2023', 'The Collapse', 'When trust disappears, a currency can lose almost everything.'],
+  ['IV', '2026', 'Lebanon Today', 'Calm on the surface, but the foundations are still broken.'],
+  ['V', '2026 – 2031', 'Our Roadmap', 'Fix the foundations first, then lock in the anchor.'],
+  ['VI', '2031', 'The New Lira', 'There is no monetary shortcut to political discipline.'],
+];
+let html = '';
+if (URL_) html += `
+<section class="page entrance">
+  <div class="eyebrow">AUGMENTED REALITY EXHIBITION</div>
+  <h1>Museum of the<br><em>Lebanese Lira</em></h1>
+  <div class="sub">1920 – 2031 · six exhibits, one currency</div>
+  <div class="qr"><img src="../print/qr.png"></div>
+  <div class="url">${URL_.replace(/^https?:\/\//, '')}</div>
+  <ol>
+    <li>Scan the QR code and tap <b>Enter the museum</b>.</li>
+    <li>Allow the camera, then point it at any exhibit frame.</li>
+    <li>Watch the exhibit come alive, or tap <b>Audio guide</b>.</li>
+  </ol>
+  <div class="credits">GEHS 260 · History of the Lebanese Monetary System since 1918 · USEK · Fall 2026<br>
+  Group 5: Bachir Rouhana · Camil Ouneissy · Georges Akiki · Salim Gergess</div>
+</section>`;
+EX.forEach(([r, p, t, l], i) => {
+  html += `
+<section class="page">
+  <div class="top">MUSEUM OF THE LEBANESE LIRA · 1920–2031</div>
+  <img class="art" src="../targets/exhibit-${i + 1}.png">
+  <div class="label">
+    <div><div class="num">EXHIBIT ${r} · ${p}</div><h2>${t}</h2><p>${l}</p></div>
+    <div class="scan"><span class="icon">&#128247;</span>Point the museum camera at the painting</div>
+  </div>
+  <div class="cut">Print at 100% scale on A4 · keep the painting flat and unglossy for best tracking</div>
+</section>`;
+});
+document.getElementById('root').innerHTML = html;
+</script>
+</body>
+</html>

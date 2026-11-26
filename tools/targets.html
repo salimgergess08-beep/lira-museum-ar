@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Target artwork generator</title>
+<script src="../vendor/mind-ar/mindar-image.prod.js" type="module"></script>
+</head>
+<body style="background:#333">
+<script>
+// Draws the six exhibit "paintings" used as AR image targets.
+// Rich, non-repeating detail = reliable tracking.
+const W = 900, H = 1200;
+const PAL = [
+  ['#5b3a1e', '#a8743a', '#f3e2c0', '#2a1a0c'],  // 1920 sepia
+  ['#123d36', '#3f8f6b', '#e8f1df', '#0a1f1b'],  // peg green
+  ['#4a0f14', '#c2373d', '#ffe1d6', '#22070a'],  // collapse red
+  ['#1d2a44', '#4f74b8', '#e1e9f7', '#0c1322'],  // today blue
+  ['#3b2d0b', '#d19a2a', '#fff2cc', '#1f1704'],  // roadmap amber
+  ['#0f3b38', '#2aa38c', '#f6e7b0', '#081e1c'],  // new lira teal-gold
+];
+const TITLES = ['The Birth of the Lira', 'The Peg', 'The Collapse', 'Lebanon Today', 'Our Roadmap', 'The New Lira'];
+const PERIODS = ['1920', '1997–2019', '2019–2023', '2026', '2026–2031', '2031'];
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+
+function rng(seed) { let s = seed * 9301 + 49297; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
+
+function guilloche(g, cx, cy, R, r, d, turns, color, lw) {
+  g.strokeStyle = color; g.lineWidth = lw; g.beginPath();
+  const n = 3000;
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * Math.PI * 2 * turns;
+    const x = (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t);
+    const y = (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
+    i ? g.lineTo(cx + x, cy + y) : g.moveTo(cx + x, cy + y);
+  }
+  g.stroke();
+}
+function cedar(ctx, cx, base, h, color) {
+  // Lebanese cedar (flag style): flat, wide, drooping tiers on a trunk
+  ctx.fillStyle = color;
+  ctx.fillRect(cx - h * 0.03, base - h * 0.86, h * 0.06, h * 0.86);
+  for (let k = 0; k < 6; k++) {
+    const y = base - h * 0.17 - k * h * 0.135;
+    const hw = h * (0.55 - k * 0.08);
+    const th = h * 0.075;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, y + th * 0.45);
+    ctx.quadraticCurveTo(cx - hw * 0.45, y - th * 0.7, cx, y - th);
+    ctx.quadraticCurveTo(cx + hw * 0.45, y - th * 0.7, cx + hw, y + th * 0.45);
+    ctx.quadraticCurveTo(cx, y + th * 0.05, cx - hw, y + th * 0.45);
+    ctx.fill();
+  }
+}
+function coin(g, x, y, r, fill, label, ink) {
+  g.fillStyle = fill; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  g.strokeStyle = ink; g.lineWidth = r * .08; g.beginPath(); g.arc(x, y, r * .86, 0, 7); g.stroke();
+  guilloche(g, x, y, r * .7, r * .26, r * .45, 26, ink, 1);
+  g.fillStyle = ink; g.font = `800 ${r * .7}px Georgia`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(label, x, y);
+}
+
+function draw(i, canvas) {
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext('2d');
+  const [dark, mid, light, ink] = PAL[i];
+  const R = rng(i + 7);
+  // background
+  const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, dark); bg.addColorStop(.55, mid); bg.addColorStop(1, dark);
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  // dense random texture: shapes of varied size/tone (key for feature detection)
+  for (let k = 0; k < 260; k++) {
+    const x = R() * W, y = R() * H, s = 6 + R() * 46;
+    g.fillStyle = R() > .5 ? `rgba(255,255,255,${.05 + R() * .22})` : `rgba(0,0,0,${.06 + R() * .25})`;
+    g.save(); g.translate(x, y); g.rotate(R() * 6.28); g.beginPath();
+    const kind = Math.floor(R() * 4);
+    if (kind === 0) g.arc(0, 0, s / 2, 0, 7);
+    else if (kind === 1) g.rect(-s / 2, -s / 3, s, s * .66);
+    else { const n = 3 + kind; for (let v = 0; v < n; v++) { const a = v / n * 6.28, rr = s / 2 * (v % 2 ? .5 : 1); g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.closePath(); }
+    g.fill(); g.restore();
+  }
+  // rosettes
+  guilloche(g, 180 + R() * 540, 330 + R() * 160, 260, 47 + i * 4, 120, 47 + i * 4, `rgba(255,255,255,.28)`, 1.3);
+  guilloche(g, 160 + R() * 580, 800 + R() * 160, 190, 29 + i * 3, 90, 29 + i * 3, `rgba(255,255,255,.22)`, 1.1);
+
+  // motif
+  g.save();
+  const cx = W / 2;
+  if (i === 0) { // balance scale
+    g.strokeStyle = light; g.fillStyle = light; g.lineWidth = 12;
+    g.beginPath(); g.moveTo(cx, 860); g.lineTo(cx, 460); g.stroke();
+    g.fillRect(cx - 140, 860, 280, 30);
+    g.save(); g.translate(cx, 470); g.rotate(-.12); g.fillRect(-290, -8, 580, 16);
+    [[-280, 1], [280, -1]].forEach(([x]) => { g.lineWidth = 3; g.beginPath(); g.moveTo(x, 0); g.lineTo(x - 70, 190); g.moveTo(x, 0); g.lineTo(x + 70, 190); g.stroke(); g.beginPath(); g.ellipse(x, 195, 95, 22, 0, 0, 7); g.fill(); });
+    g.restore();
+    coin(g, cx - 270, 600, 62, '#e2b54d', '£', '#4a3210');
+    for (let k = 0; k < 5; k++) coin(g, cx + 230 + (k % 3) * 34, 680 - Math.floor(k / 3) * 40 - (k % 3) * 6, 26, '#cfd4dc', 'F', '#333');
+    g.fillStyle = light; g.font = '700 52px Georgia'; g.textAlign = 'center'; g.fillText('1 £ = 20 FF', cx, 990);
+    g.font = '600 30px Georgia'; g.fillText('BANQUE DE SYRIE', cx, 1040);
+  }
+  if (i === 1) { // chained coins + flat line
+    coin(g, cx - 210, 560, 120, '#cfd4dc', 'L£', '#1d2b28');
+    coin(g, cx + 210, 560, 120, '#8fc27a', '$', '#123d36');
+    g.strokeStyle = '#f0c75a'; g.lineWidth = 10;
+    for (let k = 0; k < 6; k++) { g.beginPath(); g.ellipse(cx - 100 + k * 40, 560, 26, 14, 0, 0, 7); g.stroke(); }
+    g.strokeStyle = light; g.lineWidth = 6; g.beginPath(); g.moveTo(130, 900); g.lineTo(760, 900); g.stroke();
+    g.strokeStyle = '#ff5a5a'; g.beginPath(); g.moveTo(760, 900); g.lineTo(790, 760); g.stroke();
+    g.fillStyle = light; g.font = '800 92px Georgia'; g.textAlign = 'center'; g.fillText('1,507.5', cx, 850);
+    g.font = '600 30px Georgia'; g.textAlign = 'left'; g.fillText('1997', 120, 950); g.textAlign = 'right'; g.fillText('2019', 790, 950);
+  }
+  if (i === 2) { // bars + cracked coin
+    const vals = [30, 120, 560]; const cols = ['#5fd38d', '#f0a33a', '#ff4d4d'];
+    vals.forEach((v, k) => { g.fillStyle = cols[k]; g.fillRect(300 + k * 170, 980 - v, 120, v); g.fillStyle = light; g.font = '700 34px Georgia'; g.textAlign = 'center'; g.fillText(['1,507', '15,000', '89,500'][k], 360 + k * 170, 960 - v); });
+    coin(g, 170, 520, 100, '#cfd4dc', 'L£', '#3a0a0e');
+    g.strokeStyle = '#2a0508'; g.lineWidth = 6; g.beginPath(); g.moveTo(130, 430); g.lineTo(190, 510); g.lineTo(150, 560); g.lineTo(210, 620); g.stroke();
+    g.fillStyle = light; g.font = '800 80px Georgia'; g.textAlign = 'left'; g.fillText('−98%', 90, 720);
+    g.font = '700 40px Georgia'; g.fillText('268.78%', 90, 800);
+  }
+  if (i === 3) { // cedar + gold + cash
+    cedar(g, 260, 880, 420, light);
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 4 - (r % 2); c++) { g.fillStyle = r % 2 ? '#e8bf52' : '#c99a2e'; g.fillRect(480 + c * 80 + (r % 2) * 40, 880 - r * 46, 72, 40); g.strokeStyle = '#6b4c10'; g.lineWidth = 3; g.strokeRect(480 + c * 80 + (r % 2) * 40, 880 - r * 46, 72, 40); }
+        g.fillStyle = light; g.font = '800 86px Georgia'; g.textAlign = 'center'; g.fillText('89,500', cx, 1010);
+    g.font = '600 32px Georgia'; g.fillText('287 t GOLD  ·  $11.4 bn RESERVES', cx, 1058);
+  }
+  if (i === 4) { // stairs
+    const cols = ['#ff6b6b', '#f0b13a', '#5fd38d'];
+    [0, 1, 2].forEach((k) => { g.fillStyle = cols[k]; g.fillRect(140 + k * 220, 940 - (100 + k * 150), 200, 100 + k * 150); g.fillStyle = ink; g.font = '800 44px Georgia'; g.textAlign = 'center'; g.fillText(`${k + 1}`, 240 + k * 220, 990 - (100 + k * 150) + 30); });
+    coin(g, 700, 390, 60, '#e2b54d', '£', '#4a3210');
+    g.fillStyle = light; g.font = '800 76px Georgia'; g.textAlign = 'center'; g.fillText('2026 → 2031', cx, 1030);
+  }
+  if (i === 5) { // banknote
+    g.save(); g.translate(cx, 640); g.rotate(-.08);
+    const nb = g.createLinearGradient(-330, -170, 330, 170); nb.addColorStop(0, '#1f7a6b'); nb.addColorStop(1, '#b88a1e');
+    g.fillStyle = nb; g.fillRect(-330, -170, 660, 340); g.strokeStyle = light; g.lineWidth = 8; g.strokeRect(-315, -155, 630, 310);
+    guilloche(g, -150, 0, 140, 37, 70, 37, 'rgba(255,255,255,.35)', 1.2);
+    cedar(g, -170, 120, 220, 'rgba(255,255,255,.85)');
+    g.fillStyle = '#fff'; g.font = '800 120px Georgia'; g.textAlign = 'right'; g.fillText('100', 300, 0);
+    g.font = '700 46px Georgia'; g.fillText('NEW LIRA', 300, 60); g.font = '600 34px Georgia'; g.fillText('2031', 300, 110);
+    g.restore();
+    for (let k = 0; k < 5; k++) { g.fillStyle = '#4ee07f'; g.beginPath(); g.arc(210 + k * 120, 940, 26, 0, 7); g.fill(); }
+  }
+  g.restore();
+
+  // header text
+  g.fillStyle = light; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = '600 30px Georgia'; g.fillText(`EXHIBIT ${ROMAN[i]}  ·  ${PERIODS[i]}`, cx, 150);
+  g.font = 'italic 400 64px Georgia'; g.fillText(TITLES[i], cx, 225);
+
+  // gilded frame
+  const fw = 46;
+  const fg = g.createLinearGradient(0, 0, W, H); fg.addColorStop(0, '#8a6420'); fg.addColorStop(.3, '#f2d27a'); fg.addColorStop(.6, '#a87a28'); fg.addColorStop(1, '#f0cd6e');
+  g.fillStyle = fg;
+  g.fillRect(0, 0, W, fw); g.fillRect(0, H - fw, W, fw); g.fillRect(0, 0, fw, H); g.fillRect(W - fw, 0, fw, H);
+  g.strokeStyle = '#4a3410'; g.lineWidth = 4; g.strokeRect(fw - 6, fw - 6, W - 2 * fw + 12, H - 2 * fw + 12);
+  g.strokeRect(6, 6, W - 12, H - 12);
+  // asymmetric corner ornaments (unique per exhibit) to help orientation
+  const Rr = rng(i + 101);
+  for (let k = 0; k < 40; k++) { g.fillStyle = Rr() > .5 ? '#4a3410' : '#fff3c4'; g.beginPath(); const side = k % 4; const p = Rr();
+    const x = side < 2 ? p * W : (side === 2 ? fw / 2 : W - fw / 2); const y = side < 2 ? (side === 0 ? fw / 2 : H - fw / 2) : p * H;
+    g.arc(x, y, 5 + Rr() * 9, 0, 7); g.fill(); }
+  return canvas.toDataURL('image/png');
+}
+
+window.renderTarget = (i) => draw(i, document.createElement('canvas'));
+
+window.compileAll = async (urls) => {
+  const imgs = await Promise.all(urls.map((u) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.src = u; })));
+  const compiler = new window.MINDAR.IMAGE.Compiler();
+  const data = await compiler.compileImageTargets(imgs, (p) => (window.__progress = p));
+  const buf = await compiler.exportData();
+  let bin = ''; const bytes = new Uint8Array(buf);
+  for (let k = 0; k < bytes.length; k += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(k, k + 0x8000));
+  return { b64: btoa(bin), points: data.map((d) => d.trackingData ? d.trackingData.map((t) => t.points.length) : null) };
+};
+</script>
+</body>
+</html>
